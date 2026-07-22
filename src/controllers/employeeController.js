@@ -65,6 +65,17 @@ async function ensureEmployees() {
   await seedMissingDefaults();
 }
 
+let ensurePromise = null;
+function ensureEmployeesOnce() {
+  if (!ensurePromise) {
+    ensurePromise = ensureEmployees().catch((err) => {
+      ensurePromise = null;
+      throw err;
+    });
+  }
+  return ensurePromise;
+}
+
 exports.fetch = async (req, res) => {
   const { id } = req.body;
 
@@ -73,7 +84,7 @@ exports.fetch = async (req, res) => {
   }
 
   try {
-    await ensureEmployees();
+    await ensureEmployeesOnce();
 
     let employees = [];
     if (id) {
@@ -88,6 +99,96 @@ exports.fetch = async (req, res) => {
     res.status(200).json({
       success: true,
       employees,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/** Aggregate client status counts per employee (supports multi assigned_to). */
+exports.statusCounts = async (req, res) => {
+  if (!admins.includes(req.user["email"])) {
+    return res.status(400).json({ success: false, message: "Not authorised" });
+  }
+
+  try {
+    await ensureEmployeesOnce();
+    const employees = await collection.find().sort({ exactDate: 1 }).toArray();
+    const clients = db.collection("clients");
+
+    const rows = await clients
+      .aggregate([
+        {
+          $project: {
+            status: 1,
+            assignees: {
+              $filter: {
+                input: {
+                  $map: {
+                    input: { $split: [{ $ifNull: ["$assigned_to", ""] }, ","] },
+                    as: "a",
+                    in: { $trim: { input: "$$a" } },
+                  },
+                },
+                as: "name",
+                cond: { $ne: ["$$name", ""] },
+              },
+            },
+          },
+        },
+        { $unwind: "$assignees" },
+        {
+          $group: {
+            _id: { name: "$assignees", status: "$status" },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+
+    const statuses = [
+      "Active",
+      "Inactive",
+      "In contact",
+      "Deposit paid",
+      "Cancelled",
+      "Postponed",
+      "Done",
+    ];
+
+    const byName = {};
+    for (const emp of employees) {
+      byName[emp.name] = {
+        employee: emp,
+        counts: Object.fromEntries(statuses.map((s) => [s, 0])),
+        total: 0,
+      };
+    }
+
+    for (const row of rows) {
+      const name = row._id?.name;
+      const status = row._id?.status;
+      if (!name || !byName[name]) continue;
+      if (statuses.includes(status)) {
+        byName[name].counts[status] = row.count;
+        byName[name].total += row.count;
+      }
+    }
+
+    const result = employees.map((emp) => ({
+      _id: emp._id,
+      name: emp.name,
+      exactDate: emp.exactDate,
+      counts: byName[emp.name].counts,
+      total: byName[emp.name].total,
+    }));
+
+    res.status(200).json({
+      success: true,
+      employees: result,
     });
   } catch (error) {
     res.status(400).json({

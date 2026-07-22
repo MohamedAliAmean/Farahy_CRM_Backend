@@ -1,41 +1,68 @@
 const admins = require("../services/admins");
 const { db } = require("../services/db");
+const {
+  EVENT_LIST_PROJECTION,
+  parsePagination,
+  wantsLightweight,
+} = require("../utils/listQuery");
 
 const collection = db.collection("events");
 
-exports.fetch= async (req, res) => {
-    const { id, clientID } = req.body;
+exports.fetch = async (req, res) => {
+  const { id, clientID } = req.body;
 
-    console.log(clientID);
+  if (!admins.includes(req.user["email"])) {
+    return res.status(400).json({ success: false, message: "Not authorised" });
+  }
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
+  try {
+    let events = [];
+
+    if (id) {
+      const event = await collection.findOne({ _id: id });
+      if (event) events.push(event);
+    } else if (clientID) {
+      const lightweight = wantsLightweight(req.body);
+      const projection = lightweight ? EVENT_LIST_PROJECTION : undefined;
+      events = await collection
+        .find({ clientID }, projection ? { projection } : undefined)
+        .toArray();
+    } else {
+      const lightweight = wantsLightweight(req.body);
+      const { paginate, page, limit, skip } = parsePagination(req.body);
+      const projection = lightweight ? EVENT_LIST_PROJECTION : undefined;
+      const filter = {};
+      if (req.body.eventType && req.body.eventType !== "All") {
+        filter.eventType = req.body.eventType;
+      }
+
+      let cursor = collection.find(filter, projection ? { projection } : undefined);
+      if (paginate) {
+        const total = await collection.countDocuments(filter);
+        events = await cursor.skip(skip).limit(limit).toArray();
+        return res.status(200).json({
+          success: true,
+          events,
+          page,
+          limit,
+          total,
+          hasMore: skip + events.length < total,
+        });
+      }
+
+      events = await cursor.toArray();
     }
 
-    try {
-        var events = [];
-
-        if(id){
-            var event = await collection.findOne({_id: id});
-            if(event)
-            events.push(event);
-        } else if(clientID) {
-            console.log('hena');
-            events = await collection.find({clientID: clientID}).toArray();
-        } else {
-            events = await collection.find().toArray();
-        }
-
-        res.status(200).json({
-            success: true,
-            events: events,
-        });
-    } catch (error) {
-        res.status(400).json({
-            success: false,
-            message: error.message,
-        });
-    }
+    res.status(200).json({
+      success: true,
+      events,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 exports.create = async (req, res) => {

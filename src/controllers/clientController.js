@@ -1,35 +1,77 @@
 const admins = require("../services/admins");
 const { db } = require("../services/db");
+const {
+  CLIENT_LIST_PROJECTION,
+  parsePagination,
+  wantsLightweight,
+} = require("../utils/listQuery");
 
 const collection = db.collection("clients");
 
 exports.fetch = async (req, res) => {
-    const { id } = req.body;
+  const { id } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+  if (!admins.includes(req.user["email"])) {
+    return res.status(400).json({ success: false, message: "Not authorised" });
+  }
 
-    try {
-        var clients = [];
+  try {
+    let clients = [];
 
-        if(id){
-            var client = await collection.findOne({_id: id});
-            clients.push(client);
-        } else {
-            clients = await collection.find().toArray();
+    if (id) {
+      const client = await collection.findOne({ _id: id });
+      if (client) clients.push(client);
+    } else {
+      const lightweight = wantsLightweight(req.body);
+      const { paginate, page, limit, skip } = parsePagination(req.body);
+      const projection = lightweight ? CLIENT_LIST_PROJECTION : undefined;
+      const filter = {};
+
+      if (req.body.status && req.body.status !== "All") {
+        filter.status = req.body.status;
+      }
+      if (req.body.assigned_to && req.body.assigned_to !== "All") {
+        filter.assigned_to = {
+          $regex: req.body.assigned_to.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        };
+      }
+      if (req.body.q) {
+        const q = String(req.body.q).trim();
+        if (q) {
+          filter.$or = [
+            { name: { $regex: q, $options: "i" } },
+            { number: { $regex: q, $options: "i" } },
+          ];
         }
+      }
 
-        res.status(200).json({
-            success: true,
-            clients: clients,
+      let cursor = collection.find(filter, projection ? { projection } : undefined);
+      if (paginate) {
+        const total = await collection.countDocuments(filter);
+        clients = await cursor.skip(skip).limit(limit).toArray();
+        return res.status(200).json({
+          success: true,
+          clients,
+          page,
+          limit,
+          total,
+          hasMore: skip + clients.length < total,
         });
-    } catch (error) {
-        res.status(400).json({
-            success: false,
-            message: error.message,
-        });
+      }
+
+      clients = await cursor.toArray();
     }
+
+    res.status(200).json({
+      success: true,
+      clients,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 exports.create = async (req, res) => {

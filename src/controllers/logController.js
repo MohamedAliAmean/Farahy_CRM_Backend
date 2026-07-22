@@ -4,29 +4,28 @@ const admins = require("../services/admins");
 const collection = db.collection("logs");
 
 exports.fetch = async (req, res) => {
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+  if (!admins.includes(req.user["email"])) {
+    return res.status(400).json({ success: false, message: "Not authorised" });
+  }
 
-    try {
-        var logs = [];
+  try {
+    const limit = Math.min(200, Math.max(1, parseInt(req.body?.limit, 10) || 100));
+    const logs = await collection
+      .find()
+      .sort({ exactDate: -1 })
+      .limit(limit)
+      .toArray();
 
-        logs = await collection.find()
-        .sort({ exactDate: -1 })
-        .toArray();
-
-        console.log(logs);
-
-        res.status(200).json({
-            success: true,
-            data: logs,
-        });
-    } catch (error) {
-        res.status(400).json({
-            success: false,
-            message: error.message,
-        });
-    }
+    res.status(200).json({
+      success: true,
+      data: logs,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 exports.create = async (req, res) => {
