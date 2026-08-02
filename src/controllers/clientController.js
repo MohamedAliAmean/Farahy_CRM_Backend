@@ -108,9 +108,7 @@ exports.update = async (req, res) => {
 
     try {
         console.log(model);
-        await collection.findOneAndUpdate(
-            {_id: id}, 
-            {$set: {
+        const update = {
                 name: model['name'], 
                 number: model['number'], 
                 fromAd: model['fromAd'], 
@@ -119,7 +117,20 @@ exports.update = async (req, res) => {
                 channel: model['channel'],
                 additionalNumbers: model['additionalNumbers'],
                 cancellationReason: model['cancellationReason'],
-            }}
+            };
+        if (Object.prototype.hasOwnProperty.call(model, "clientSatisfaction")) {
+          const raw = model["clientSatisfaction"];
+          if (raw === null || raw === "" || raw === undefined) {
+            update.clientSatisfaction = null;
+          } else {
+            const score = parseInt(raw, 10);
+            update.clientSatisfaction =
+              Number.isInteger(score) && score >= 1 && score <= 10 ? score : null;
+          }
+        }
+        await collection.findOneAndUpdate(
+            {_id: id}, 
+            {$set: update}
         );
         console.log("Client updated");
 
