@@ -1,12 +1,10 @@
 const { db } = require("../services/db");
-const admins = require("../services/admins");
+const { requireActive, requireAction, requirePage } = require("../middleware/authz");
 
 const collection = db.collection("logs");
 
 exports.fetch = async (req, res) => {
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requirePage(req, res, "logs")) return;
 
   try {
     const limit = Math.min(200, Math.max(1, parseInt(req.body?.limit, 10) || 100));
@@ -31,9 +29,7 @@ exports.fetch = async (req, res) => {
 exports.create = async (req, res) => {
     const {model} = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireActive(req, res)) return;
 
     try {
         model['exactDate'] = new Date();

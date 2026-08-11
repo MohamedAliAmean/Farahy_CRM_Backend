@@ -1,4 +1,6 @@
 const { admin } = require("../services/firebase");
+const usersService = require("../services/users");
+const { resolvePermissions } = require("../services/permissions");
 
 // Cache verified Firebase tokens until near expiry to cut verifyIdToken cost.
 const tokenCache = new Map();
@@ -40,12 +42,33 @@ const verifyFirebaseToken = async (req, res, next) => {
     const cached = getCachedUser(token);
     if (cached) {
       req.user = cached;
-      return next();
+    } else {
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      setCachedUser(token, decodedToken);
+      req.user = decodedToken;
     }
 
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    setCachedUser(token, decodedToken);
-    req.user = decodedToken;
+    const email = (req.user.email || "").toLowerCase();
+    if (!email) {
+      return res.status(403).json({ error: "Forbidden", message: "Missing email" });
+    }
+
+    let crmUser = await usersService.findByEmail(email);
+    if (!crmUser) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "Account is not authorized for this CRM",
+      });
+    }
+    if (crmUser.status !== "active") {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "Account is disabled",
+      });
+    }
+
+    req.crmUser = crmUser;
+    req.permissions = resolvePermissions(crmUser);
     next();
   } catch (error) {
     console.error("Error verifying token:", error);

@@ -1,4 +1,4 @@
-const admins = require("../services/admins");
+const { requireActive, requireAction, requirePage } = require("../middleware/authz");
 const { db } = require("../services/db");
 const { ObjectId } = require("mongodb");
 
@@ -79,9 +79,7 @@ function ensureEmployeesOnce() {
 exports.fetch = async (req, res) => {
   const { id } = req.body;
 
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requirePage(req, res, "employees")) return;
 
   try {
     await ensureEmployeesOnce();
@@ -110,9 +108,7 @@ exports.fetch = async (req, res) => {
 
 /** Aggregate client status counts per employee (supports multi assigned_to). */
 exports.statusCounts = async (req, res) => {
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requirePage(req, res, "employees")) return;
 
   try {
     await ensureEmployeesOnce();
@@ -201,9 +197,7 @@ exports.statusCounts = async (req, res) => {
 exports.create = async (req, res) => {
   const { name } = req.body;
 
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requireAction(req, res, "create")) return;
 
   try {
     const trimmed = (name || "").trim();
@@ -244,9 +238,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   const { id, employeeData } = req.body;
 
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requireAction(req, res, "edit")) return;
 
   try {
     if (!id || !employeeData || !employeeData.name) {
@@ -287,9 +279,7 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
   const { id } = req.body;
 
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requireAction(req, res, "delete")) return;
 
   try {
     await collection.deleteOne({ _id: id });

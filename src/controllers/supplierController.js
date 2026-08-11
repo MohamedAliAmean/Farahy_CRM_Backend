@@ -1,4 +1,4 @@
-const admins = require("../services/admins");
+const { requireActive, requireAction, requirePage } = require("../middleware/authz");
 const { db } = require("../services/db");
 const {
   SUPPLIER_LIST_PROJECTION,
@@ -11,9 +11,7 @@ const collection = db.collection("suppliers");
 exports.fetch = async (req, res) => {
   const { id } = req.body;
 
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requirePage(req, res, "suppliers")) return;
 
   try {
     let suppliers = [];
@@ -77,9 +75,7 @@ exports.fetch = async (req, res) => {
 exports.update = async (req, res) => {
     const { id, supplierData } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "edit")) return;
 
     try {
         await collection.findOneAndUpdate(
@@ -103,9 +99,7 @@ exports.update = async (req, res) => {
 exports.validateSupplier = async (req, res) => {
     const { instaHandle, number } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireActive(req, res)) return;
 
     try {
         let repeatedHandle = false;
@@ -155,9 +149,7 @@ exports.create = async (req, res) => {
         note 
     } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "create")) return;
 
     try {
         const { ObjectId } = require('mongodb');
@@ -206,9 +198,7 @@ exports.create = async (req, res) => {
 exports.delete = async (req, res) => {
     const { id } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "delete")) return;
 
     try {
         await collection.deleteOne({ _id: id });

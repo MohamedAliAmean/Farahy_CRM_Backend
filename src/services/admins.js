@@ -1,11 +1,4 @@
-var admins = [
-    'nadine@farahy.net',
-    'aleya.shaalan@farahy.net',
-    'ayahassan@farahy.net',
-    'amira.rashad@farahy.net',
-    'marwa.elsanhory@farahy.net',
-    'admin@farahy.net',
-    'accountant@farahy.net'
-];
+/// Legacy list kept only as reference/seed source. Authorization now uses Mongo `users`.
+const { LEGACY_EMAILS } = require("./permissions");
 
-module.exports = admins;
+module.exports = LEGACY_EMAILS;

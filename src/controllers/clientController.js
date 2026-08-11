@@ -1,4 +1,4 @@
-const admins = require("../services/admins");
+const { requireActive, requireAction, requirePage } = require("../middleware/authz");
 const { db } = require("../services/db");
 const {
   CLIENT_LIST_PROJECTION,
@@ -11,9 +11,7 @@ const collection = db.collection("clients");
 exports.fetch = async (req, res) => {
   const { id } = req.body;
 
-  if (!admins.includes(req.user["email"])) {
-    return res.status(400).json({ success: false, message: "Not authorised" });
-  }
+  if (!requirePage(req, res, "clients")) return;
 
   try {
     let clients = [];
@@ -26,6 +24,15 @@ exports.fetch = async (req, res) => {
       const { paginate, page, limit, skip } = parsePagination(req.body);
       const projection = lightweight ? CLIENT_LIST_PROJECTION : undefined;
       const filter = {};
+
+      // Restrict to assigned records when dataScope.mode = assigned_only
+      if (req.permissions?.dataScope?.mode === "assigned_only" && !id) {
+        const display =
+          (req.crmUser.displayName || "").trim() ||
+          (req.crmUser.email || "").split("@")[0];
+        const escaped = display.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        filter.assigned_to = { $regex: escaped, $options: "i" };
+      }
 
       if (req.body.status && req.body.status !== "All") {
         filter.status = req.body.status;
@@ -77,9 +84,7 @@ exports.fetch = async (req, res) => {
 exports.create = async (req, res) => {
     const { model } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "create")) return;
 
     try {
         model['exactDate'] = new Date();
@@ -102,9 +107,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
     const { id, model } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "edit")) return;
 
     try {
         console.log(model);
@@ -149,9 +152,7 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
     const { id } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "delete")) return;
 
     try {
         console.log(id);
@@ -173,9 +174,7 @@ exports.delete = async (req, res) => {
 exports.checkNumber = async (req, res) => {
     const { number } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireActive(req, res)) return;
 
     console.log(number);
 
@@ -210,9 +209,7 @@ exports.checkNumber = async (req, res) => {
 exports.updateReminders = async (req, res) => {
     const { id, reminders } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "edit")) return;
 
     try {
         await collection.findOneAndUpdate(
@@ -238,9 +235,7 @@ exports.updateReminders = async (req, res) => {
 exports.updateNotes = async (req, res) => {
     const { id, notes } = req.body;
 
-    if(!admins.includes(req.user['email'])){        
-        return res.status(400).json({ success: false, message: "Not authorised" });
-    }
+    if (!requireAction(req, res, "edit")) return;
 
     try {
         await collection.findOneAndUpdate(
