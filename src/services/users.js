@@ -115,8 +115,22 @@ async function updateUser(email, patch) {
     updatedAt: new Date(),
   };
 
+  if (patch.passwordSetAt !== undefined) {
+    next.passwordSetAt = patch.passwordSetAt;
+  }
+
+  // Never skip email setup for accounts that are still pending.
+  if (
+    next.status === "active" &&
+    existing.status === "pending" &&
+    !existing.passwordSetAt &&
+    !next.passwordSetAt
+  ) {
+    next.status = "pending";
+  }
+
   if (!roleTemplate(next.role)) throw new Error("Invalid role");
-  if (!["active", "disabled"].includes(next.status)) {
+  if (!["active", "disabled", "pending"].includes(next.status)) {
     throw new Error("Invalid status");
   }
 

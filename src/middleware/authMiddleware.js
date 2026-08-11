@@ -63,7 +63,10 @@ const verifyFirebaseToken = async (req, res, next) => {
     if (crmUser.status !== "active") {
       return res.status(403).json({
         error: "Forbidden",
-        message: "Account is disabled",
+        message:
+          crmUser.status === "pending"
+            ? "Account setup incomplete. Verify your email and set a password first."
+            : "Account is disabled",
       });
     }
 

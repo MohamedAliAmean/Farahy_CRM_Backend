@@ -1,6 +1,8 @@
 const { admin } = require("../services/firebase");
 const usersService = require("../services/users");
 const { resolvePermissions, publicUser } = require("../services/permissions");
+const mail = require("../services/mail");
+const authCodeController = require("./authCodeController");
 const {
   requireActive,
   requireManageUsers,
@@ -58,16 +60,15 @@ exports.create = async (req, res) => {
     const email = String(req.body.email || "")
       .trim()
       .toLowerCase();
-    const password = String(req.body.password || "");
     const displayName = String(req.body.displayName || "").trim();
     const role = String(req.body.role || "viewer").trim();
     const overrides = validateOverrides(req.body.overrides);
 
-    if (!email || !password) {
-      return deny(res, "Email and password are required");
+    if (!email) {
+      return deny(res, "Email is required");
     }
-    if (password.length < 6) {
-      return deny(res, "Password must be at least 6 characters");
+    if (!authCodeController.isValidEmail(email)) {
+      return deny(res, "Enter a valid email");
     }
 
     const existing = await usersService.findByEmail(email);
@@ -75,18 +76,25 @@ exports.create = async (req, res) => {
       return deny(res, "User already exists in CRM");
     }
 
+    const password = authCodeController.randomPassword();
     let firebaseUser;
     try {
       firebaseUser = await admin.auth().createUser({
         email,
         password,
         displayName: displayName || email.split("@")[0],
-        emailVerified: true,
-        disabled: false,
+        emailVerified: false,
+        disabled: true,
       });
     } catch (err) {
       if (err?.code === "auth/email-already-exists") {
         firebaseUser = await admin.auth().getUserByEmail(email);
+        await admin.auth().updateUser(firebaseUser.uid, {
+          password,
+          displayName: displayName || firebaseUser.displayName || email.split("@")[0],
+          disabled: true,
+          emailVerified: false,
+        });
       } else {
         throw err;
       }
@@ -96,15 +104,32 @@ exports.create = async (req, res) => {
       email,
       displayName: displayName || firebaseUser.displayName || email.split("@")[0],
       role,
-      status: "active",
+      status: "pending",
       overrides,
       createdBy: req.crmUser.email,
     });
 
+    try {
+      await mail.sendInviteEmail({
+        to: email,
+        displayName: user.displayName,
+      });
+    } catch (mailErr) {
+      console.error("Invite email failed:", mailErr);
+      return res.status(201).json({
+        success: true,
+        message:
+          "User created, but invite email failed to send. Use Resend invite.",
+        user,
+        emailSent: false,
+      });
+    }
+
     res.status(201).json({
       success: true,
-      message: "User created successfully",
+      message: "User created. Invite email sent.",
       user,
+      emailSent: true,
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -155,11 +180,12 @@ exports.update = async (req, res) => {
     const user = await usersService.updateUser(email, patch);
 
     // Keep Firebase disabled flag in sync with CRM status.
+    // Only fully active users can sign in with email/password.
     if (patch.status) {
       try {
         const fbUser = await admin.auth().getUserByEmail(email);
         await admin.auth().updateUser(fbUser.uid, {
-          disabled: patch.status === "disabled",
+          disabled: patch.status !== "active",
         });
       } catch (_) {
         // CRM record still updates even if Firebase sync fails.
