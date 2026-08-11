@@ -35,6 +35,9 @@ exports.fetch = async (req, res) => {
           filter.$or = [
             { name: { $regex: q, $options: "i" } },
             { instaHandle: { $regex: q, $options: "i" } },
+            { number: { $regex: q, $options: "i" } },
+            { email: { $regex: q, $options: "i" } },
+            { additionalNumbers: { $elemMatch: { $regex: q, $options: "i" } } },
           ];
         }
       }
@@ -116,8 +119,12 @@ exports.validateSupplier = async (req, res) => {
         }
 
         if(number) {
+            const trimmed = number.trim();
             const numberCount = await collection.countDocuments({
-                number: number.trim()
+                $or: [
+                    { number: trimmed },
+                    { additionalNumbers: trimmed },
+                ],
             });
             repeatedNumber = numberCount > 0;
         }
@@ -138,7 +145,8 @@ exports.validateSupplier = async (req, res) => {
 exports.create = async (req, res) => {
     const { 
         name, 
-        number, 
+        number,
+        additionalNumbers,
         email, 
         instaHandle, 
         category, 
@@ -154,11 +162,17 @@ exports.create = async (req, res) => {
     try {
         const { ObjectId } = require('mongodb');
         const supplierId = new ObjectId().toString();
+        const extras = Array.isArray(additionalNumbers)
+            ? additionalNumbers
+                .map((n) => String(n ?? '').trim())
+                .filter((n) => n.length > 0)
+            : [];
         
         const supplier = {
             _id: supplierId,
             name: name.trim(),
             number: number.trim(),
+            additionalNumbers: extras,
             email: email.trim().toLowerCase(),
             instaHandle: instaHandle.trim().toLowerCase(),
             category: category,
