@@ -5,8 +5,15 @@ const {
   parsePagination,
   wantsLightweight,
 } = require("../utils/listQuery");
+const mail = require("../services/mail");
+const {
+  findEmailsByAssigneeNames,
+  parseAssigneeNames,
+} = require("./employeeController");
+const reminderNotify = require("../services/reminderNotify");
 
 const collection = db.collection("events");
+const clientsCollection = db.collection("clients");
 
 exports.fetch = async (req, res) => {
   const { id, clientID } = req.body;
@@ -85,6 +92,32 @@ exports.create = async (req, res) => {
         await collection.insertOne(model);
 
         console.log("Event created");
+
+        // Notify event Assigned To employees (separate from client assignees).
+        try {
+          const client = model.clientID
+            ? await clientsCollection.findOne({ _id: model.clientID })
+            : null;
+          const clientName = client?.name || "";
+          const names = parseAssigneeNames(model.assigned_to);
+          const recipients = await findEmailsByAssigneeNames(names);
+          await Promise.all(
+            recipients.map((recipient) =>
+              mail.sendAssignmentEventEmail({
+                to: recipient.email,
+                employeeName: recipient.name,
+                clientName,
+                eventType: model.eventType,
+                status: model.status,
+                requestDate: model.request_Date,
+                eventDate: model.event_Date,
+                assignedTo: model.assigned_to,
+              })
+            )
+          );
+        } catch (mailErr) {
+          console.error("Assignment notify email failed:", mailErr.message || mailErr);
+        }
 
         res.status(200).json({
             success: true,
@@ -182,17 +215,30 @@ exports.updateReminders = async (req, res) => {
     if (!requireAction(req, res, "edit")) return;
 
     try {
-        await collection.findOneAndUpdate(
-            {_id: id}, 
-            {$set: {
-                reminders: reminders, 
-            }}
-        );
-        console.log("Client reminders updated");
+        const enriched = await reminderNotify.processReminderUpdate({
+          collection,
+          id,
+          incomingReminders: reminders,
+          contextBuilder: async (event) => {
+            let clientName = "";
+            if (event.clientID) {
+              const client = await clientsCollection.findOne({
+                _id: event.clientID,
+              });
+              clientName = client?.name || "";
+            }
+            return {
+              clientName,
+              eventType: event.eventType || "",
+            };
+          },
+        });
+        console.log("Event reminders updated");
 
         res.status(200).json({
             success: true,
-            message: "Client reminders updated successfully",
+            message: "Event reminders updated successfully",
+            reminders: enriched,
         });
     } catch (error) {
         res.status(400).json({

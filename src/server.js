@@ -2,6 +2,7 @@ const http = require("http");
 const app = require("./app");
 const { connectDB } = require("./services/db");
 const { ensureSeeded } = require("./services/users");
+const { startDueReminderScheduler } = require("./services/reminderNotify");
 
 const port = process.env.PORT || 3000;
 
@@ -14,6 +15,7 @@ connectDB().then(async () => {
     } catch (err) {
         console.error("CRM users seed failed:", err.message);
     }
+    startDueReminderScheduler();
     server.listen(port, () => {
         console.log(`App running on port ${port}...`);
     });

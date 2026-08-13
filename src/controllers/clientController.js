@@ -5,6 +5,12 @@ const {
   parsePagination,
   wantsLightweight,
 } = require("../utils/listQuery");
+const mail = require("../services/mail");
+const {
+  findEmailsByAssigneeNames,
+  parseAssigneeNames,
+} = require("./employeeController");
+const reminderNotify = require("../services/reminderNotify");
 
 const collection = db.collection("clients");
 
@@ -91,6 +97,27 @@ exports.create = async (req, res) => {
         console.log(model);
         await collection.insertOne(model);
         console.log("Client created");
+
+        // Notify client Assigned To employees (separate from event assignees).
+        try {
+          const names = parseAssigneeNames(model.assigned_to);
+          const recipients = await findEmailsByAssigneeNames(names);
+          await Promise.all(
+            recipients.map((recipient) =>
+              mail.sendAssignmentClientEmail({
+                to: recipient.email,
+                employeeName: recipient.name,
+                clientName: model.name,
+                status: model.status,
+                channel: model.channel,
+                number: model.number,
+                assignedTo: model.assigned_to,
+              })
+            )
+          );
+        } catch (mailErr) {
+          console.error("Client assignment notify email failed:", mailErr.message || mailErr);
+        }
 
         res.status(200).json({
             success: true,
@@ -212,17 +239,21 @@ exports.updateReminders = async (req, res) => {
     if (!requireAction(req, res, "edit")) return;
 
     try {
-        await collection.findOneAndUpdate(
-            {_id: id}, 
-            {$set: {
-                reminders: reminders, 
-            }}
-        );
+        const enriched = await reminderNotify.processReminderUpdate({
+          collection,
+          id,
+          incomingReminders: reminders,
+          contextBuilder: async (client) => ({
+            clientName: client.name || "",
+            eventType: "",
+          }),
+        });
         console.log("Client reminders updated");
 
         res.status(200).json({
             success: true,
             message: "Client reminders updated successfully",
+            reminders: enriched,
         });
     } catch (error) {
         res.status(400).json({

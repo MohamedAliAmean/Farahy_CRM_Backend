@@ -19,6 +19,39 @@ function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function parseAssigneeNames(assignedTo) {
+  return String(assignedTo || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part && part.toLowerCase() !== "multi");
+}
+
+async function findEmailsByAssigneeNames(names) {
+  const emails = [];
+  const seen = new Set();
+  for (const name of names) {
+    const emp = await collection.findOne({
+      name: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
+    });
+    const email = normalizeEmail(emp?.email);
+    if (!email || !isValidEmail(email) || seen.has(email)) continue;
+    seen.add(email);
+    emails.push({ name: emp.name, email });
+  }
+  return emails;
+}
+
+module.exports.findEmailsByAssigneeNames = findEmailsByAssigneeNames;
+module.exports.parseAssigneeNames = parseAssigneeNames;
+
 async function dedupeEmployees() {
   const all = await collection.find().sort({ exactDate: 1 }).toArray();
   const seen = new Set();
@@ -177,6 +210,7 @@ exports.statusCounts = async (req, res) => {
     const result = employees.map((emp) => ({
       _id: emp._id,
       name: emp.name,
+      email: emp.email || "",
       exactDate: emp.exactDate,
       counts: byName[emp.name].counts,
       total: byName[emp.name].total,
@@ -195,14 +229,18 @@ exports.statusCounts = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const { name } = req.body;
+  const { name, email } = req.body;
 
   if (!requireAction(req, res, "create")) return;
 
   try {
     const trimmed = (name || "").trim();
+    const normalizedEmail = normalizeEmail(email);
     if (!trimmed) {
       return res.status(400).json({ success: false, message: "Name is required" });
+    }
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: "Enter a valid email" });
     }
 
     const existing = await collection.findOne({
@@ -216,6 +254,7 @@ exports.create = async (req, res) => {
     const employee = {
       _id: employeeId,
       name: trimmed,
+      email: normalizedEmail || "",
       exactDate: new Date(),
     };
 
@@ -246,8 +285,12 @@ exports.update = async (req, res) => {
     }
 
     const trimmed = String(employeeData.name).trim();
+    const normalizedEmail = normalizeEmail(employeeData.email);
     if (!trimmed) {
       return res.status(400).json({ success: false, message: "Name is required" });
+    }
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: "Enter a valid email" });
     }
 
     const duplicate = await collection.findOne({
@@ -260,7 +303,7 @@ exports.update = async (req, res) => {
 
     await collection.findOneAndUpdate(
       { _id: id },
-      { $set: { name: trimmed } }
+      { $set: { name: trimmed, email: normalizedEmail || "" } }
     );
     console.log("Employee updated");
 

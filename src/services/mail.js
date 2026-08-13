@@ -93,10 +93,127 @@ async function sendVerificationCodeEmail({ to, code, purpose }) {
   return sendMail({ to, subject, html });
 }
 
+function formatMailDate(value) {
+  if (!value) return "N/A";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+async function sendAssignmentEventEmail({
+  to,
+  employeeName,
+  clientName,
+  eventType,
+  status,
+  requestDate,
+  eventDate,
+  assignedTo,
+}) {
+  const name = employeeName || to.split("@")[0];
+  const subject = `Farahy CRM — New event assigned (${clientName || "Client"})`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto;">
+      <h2 style="color: #1a365d;">Farahy CRM</h2>
+      <p>Hi ${name},</p>
+      <p>A new event was created for a client assigned to you.</p>
+      <table style="width:100%; border-collapse: collapse; margin: 20px 0;">
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Client</strong></td><td style="padding:8px;border:1px solid #ddd;">${clientName || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Event Type</strong></td><td style="padding:8px;border:1px solid #ddd;">${eventType || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Status</strong></td><td style="padding:8px;border:1px solid #ddd;">${status || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Request Date</strong></td><td style="padding:8px;border:1px solid #ddd;">${formatMailDate(requestDate)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Event Date</strong></td><td style="padding:8px;border:1px solid #ddd;">${formatMailDate(eventDate)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Assigned To</strong></td><td style="padding:8px;border:1px solid #ddd;">${assignedTo || "N/A"}</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;">Open CRM: <a href="${crmWebUrl()}">${crmWebUrl()}</a></p>
+    </div>
+  `;
+  return sendMail({ to, subject, html });
+}
+
+async function sendAssignmentClientEmail({
+  to,
+  employeeName,
+  clientName,
+  status,
+  channel,
+  number,
+  assignedTo,
+}) {
+  const name = employeeName || to.split("@")[0];
+  const subject = `Farahy CRM — New client assigned (${clientName || "Client"})`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto;">
+      <h2 style="color: #1a365d;">Farahy CRM</h2>
+      <p>Hi ${name},</p>
+      <p>A new client was created and assigned to you.</p>
+      <table style="width:100%; border-collapse: collapse; margin: 20px 0;">
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Client</strong></td><td style="padding:8px;border:1px solid #ddd;">${clientName || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Status</strong></td><td style="padding:8px;border:1px solid #ddd;">${status || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Channel</strong></td><td style="padding:8px;border:1px solid #ddd;">${channel || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Number</strong></td><td style="padding:8px;border:1px solid #ddd;">${number || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Assigned To</strong></td><td style="padding:8px;border:1px solid #ddd;">${assignedTo || "N/A"}</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;">Open CRM: <a href="${crmWebUrl()}">${crmWebUrl()}</a></p>
+    </div>
+  `;
+  return sendMail({ to, subject, html });
+}
+
+async function sendReminderEmail({
+  to,
+  employeeName,
+  kind,
+  clientName,
+  eventType,
+  category,
+  date,
+  status,
+  assignedTo,
+  description,
+}) {
+  const name = employeeName || to.split("@")[0];
+  const isDue = kind === "due";
+  const subject = isDue
+    ? `Farahy CRM — Reminder due today (${clientName || "Client"})`
+    : `Farahy CRM — New reminder assigned (${clientName || "Client"})`;
+  const intro = isDue
+    ? "You have a reminder due today."
+    : "A new reminder was assigned to you.";
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto;">
+      <h2 style="color: #1a365d;">Farahy CRM</h2>
+      <p>Hi ${name},</p>
+      <p>${intro}</p>
+      <table style="width:100%; border-collapse: collapse; margin: 20px 0;">
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Client</strong></td><td style="padding:8px;border:1px solid #ddd;">${clientName || "N/A"}</td></tr>
+        ${
+          eventType
+            ? `<tr><td style="padding:8px;border:1px solid #ddd;"><strong>Event Type</strong></td><td style="padding:8px;border:1px solid #ddd;">${eventType}</td></tr>`
+            : ""
+        }
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Category</strong></td><td style="padding:8px;border:1px solid #ddd;">${category || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Date</strong></td><td style="padding:8px;border:1px solid #ddd;">${formatMailDate(date)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Status</strong></td><td style="padding:8px;border:1px solid #ddd;">${status || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Assigned To</strong></td><td style="padding:8px;border:1px solid #ddd;">${assignedTo || "N/A"}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><strong>Description</strong></td><td style="padding:8px;border:1px solid #ddd;">${description || "N/A"}</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;">Open CRM: <a href="${crmWebUrl()}">${crmWebUrl()}</a></p>
+    </div>
+  `;
+  return sendMail({ to, subject, html });
+}
+
 module.exports = {
   sendMail,
   sendInviteEmail,
   sendVerificationCodeEmail,
+  sendAssignmentEventEmail,
+  sendAssignmentClientEmail,
+  sendReminderEmail,
   crmWebUrl,
   mailConfig,
 };
