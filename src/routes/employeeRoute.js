@@ -5,6 +5,7 @@ const employeeController = require("../controllers/employeeController");
 const router = express.Router();
 
 router.post("/fetch", verifyFirebaseToken, employeeController.fetch);
+router.post("/names", verifyFirebaseToken, employeeController.names);
 router.post("/statusCounts", verifyFirebaseToken, employeeController.statusCounts);
 router.post("/create", verifyFirebaseToken, employeeController.create);
 router.post("/update", verifyFirebaseToken, employeeController.update);

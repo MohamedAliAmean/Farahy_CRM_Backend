@@ -139,6 +139,43 @@ exports.fetch = async (req, res) => {
   }
 };
 
+/**
+ * Names for Assigned To dropdowns.
+ * Available to any active CRM user — independent of Employees page access.
+ */
+exports.names = async (req, res) => {
+  if (!requireActive(req, res)) return;
+
+  try {
+    await ensureEmployeesOnce();
+    const employees = await collection
+      .find({}, { projection: { name: 1 } })
+      .sort({ exactDate: 1 })
+      .toArray();
+
+    const seen = new Set();
+    const names = [];
+    for (const emp of employees) {
+      const name = String(emp.name || "").trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      names.push(name);
+    }
+
+    res.status(200).json({
+      success: true,
+      names,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 /** Aggregate client status counts per employee (supports multi assigned_to). */
 exports.statusCounts = async (req, res) => {
   if (!requirePage(req, res, "employees")) return;
