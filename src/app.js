@@ -8,6 +8,7 @@ const logsRoute = require("./routes/logsRoute");
 const employeeRoute = require("./routes/employeeRoute");
 const userRoute = require("./routes/userRoute");
 const reminderRoute = require("./routes/reminderRoute");
+const channelRoute = require("./routes/channelRoute");
 
 const app = express();
 
@@ -24,5 +25,6 @@ app.use("/api/v1/logs", logsRoute);
 app.use("/api/v1/employees", employeeRoute);
 app.use("/api/v1/users", userRoute);
 app.use("/api/v1/reminders", reminderRoute);
+app.use("/api/v1/channels", channelRoute);
 
 module.exports = app;

@@ -10,6 +10,7 @@ const {
   findEmailsByAssigneeNames,
   parseAssigneeNames,
 } = require("./employeeController");
+const { ensureChannel } = require("../services/channels");
 const reminderNotify = require("../services/reminderNotify");
 
 const collection = db.collection("events");
@@ -89,6 +90,7 @@ exports.create = async (req, res) => {
 
         console.log(model);
 
+        await ensureChannel(model.channel);
         await collection.insertOne(model);
 
         console.log("Event created");
@@ -254,6 +256,9 @@ exports.update = async (req, res) => {
     if (!requireAction(req, res, "edit")) return;
 
     try {
+        if (eventData?.channel) {
+          await ensureChannel(eventData.channel);
+        }
         await collection.findOneAndUpdate(
             {_id: id}, 
             {$set: eventData}

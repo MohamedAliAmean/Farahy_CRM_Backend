@@ -10,6 +10,7 @@ const {
   findEmailsByAssigneeNames,
   parseAssigneeNames,
 } = require("./employeeController");
+const { ensureChannel } = require("../services/channels");
 const reminderNotify = require("../services/reminderNotify");
 
 const collection = db.collection("clients");
@@ -95,6 +96,7 @@ exports.create = async (req, res) => {
     try {
         model['exactDate'] = new Date();
         console.log(model);
+        await ensureChannel(model.channel);
         await collection.insertOne(model);
         console.log("Client created");
 
@@ -138,6 +140,7 @@ exports.update = async (req, res) => {
 
     try {
         console.log(model);
+        await ensureChannel(model['channel']);
         const update = {
                 name: model['name'], 
                 number: model['number'], 
