@@ -8,6 +8,38 @@ const {
 
 const collection = db.collection("suppliers");
 
+function normalizeCategories({ categories, category } = {}) {
+  const out = [];
+  const add = (raw) => {
+    const value = String(raw ?? "").trim();
+    if (!value || value === "Choose Category") return;
+    if (!out.some((c) => c.toLowerCase() === value.toLowerCase())) {
+      out.push(value);
+    }
+  };
+
+  if (Array.isArray(categories) && categories.length > 0) {
+    categories.forEach(add);
+  } else {
+    add(category);
+  }
+
+  return out;
+}
+
+function withNormalizedCategories(supplier) {
+  if (!supplier || typeof supplier !== "object") return supplier;
+  const categories = normalizeCategories({
+    categories: supplier.categories,
+    category: supplier.category,
+  });
+  return {
+    ...supplier,
+    categories,
+    category: categories[0] || supplier.category || "",
+  };
+}
+
 exports.fetch = async (req, res) => {
   const { id } = req.body;
 
@@ -18,26 +50,37 @@ exports.fetch = async (req, res) => {
 
     if (id) {
       const supplier = await collection.findOne({ _id: id });
-      if (supplier) suppliers.push(supplier);
+      if (supplier) suppliers.push(withNormalizedCategories(supplier));
     } else {
       const lightweight = wantsLightweight(req.body);
       const { paginate, page, limit, skip } = parsePagination(req.body);
       const projection = lightweight ? SUPPLIER_LIST_PROJECTION : undefined;
       const filter = {};
+      const andConditions = [];
       if (req.body.category && req.body.category !== "All") {
-        filter.category = req.body.category;
+        const cat = String(req.body.category).trim();
+        andConditions.push({
+          $or: [{ category: cat }, { categories: cat }],
+        });
       }
       if (req.body.q) {
         const q = String(req.body.q).trim();
         if (q) {
-          filter.$or = [
-            { name: { $regex: q, $options: "i" } },
-            { instaHandle: { $regex: q, $options: "i" } },
-            { number: { $regex: q, $options: "i" } },
-            { email: { $regex: q, $options: "i" } },
-            { additionalNumbers: { $elemMatch: { $regex: q, $options: "i" } } },
-          ];
+          andConditions.push({
+            $or: [
+              { name: { $regex: q, $options: "i" } },
+              { instaHandle: { $regex: q, $options: "i" } },
+              { number: { $regex: q, $options: "i" } },
+              { email: { $regex: q, $options: "i" } },
+              { additionalNumbers: { $elemMatch: { $regex: q, $options: "i" } } },
+            ],
+          });
         }
+      }
+      if (andConditions.length === 1) {
+        Object.assign(filter, andConditions[0]);
+      } else if (andConditions.length > 1) {
+        filter.$and = andConditions;
       }
 
       let cursor = collection
@@ -46,7 +89,9 @@ exports.fetch = async (req, res) => {
 
       if (paginate) {
         const total = await collection.countDocuments(filter);
-        suppliers = await cursor.skip(skip).limit(limit).toArray();
+        suppliers = (await cursor.skip(skip).limit(limit).toArray()).map(
+          withNormalizedCategories
+        );
         return res.status(200).json({
           success: true,
           suppliers,
@@ -57,7 +102,7 @@ exports.fetch = async (req, res) => {
         });
       }
 
-      suppliers = await cursor.toArray();
+      suppliers = (await cursor.toArray()).map(withNormalizedCategories);
     }
 
     res.status(200).json({
@@ -78,9 +123,22 @@ exports.update = async (req, res) => {
     if (!requireAction(req, res, "edit")) return;
 
     try {
+        const data = { ...(supplierData || {}) };
+        if (
+          Object.prototype.hasOwnProperty.call(data, "categories") ||
+          Object.prototype.hasOwnProperty.call(data, "category")
+        ) {
+          const categories = normalizeCategories({
+            categories: data.categories,
+            category: data.category,
+          });
+          data.categories = categories;
+          data.category = categories[0] || "";
+        }
+
         await collection.findOneAndUpdate(
             {_id: id}, 
-            {$set: supplierData}
+            {$set: data}
         );
         console.log("Supplier updated");
 
@@ -143,7 +201,8 @@ exports.create = async (req, res) => {
         additionalNumbers,
         email, 
         instaHandle, 
-        category, 
+        category,
+        categories,
         hq, 
         defaultCommission, 
         note 
@@ -159,6 +218,7 @@ exports.create = async (req, res) => {
                 .map((n) => String(n ?? '').trim())
                 .filter((n) => n.length > 0)
             : [];
+        const normalizedCategories = normalizeCategories({ categories, category });
         
         const supplier = {
             _id: supplierId,
@@ -167,7 +227,8 @@ exports.create = async (req, res) => {
             additionalNumbers: extras,
             email: email.trim().toLowerCase(),
             instaHandle: instaHandle.trim().toLowerCase(),
-            category: category,
+            category: normalizedCategories[0] || "",
+            categories: normalizedCategories,
             hq: hq.trim(),
             defaultCommission: parseFloat(defaultCommission),
             note: note.trim(),
