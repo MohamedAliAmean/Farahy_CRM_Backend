@@ -9,6 +9,7 @@ const employeeRoute = require("./routes/employeeRoute");
 const userRoute = require("./routes/userRoute");
 const reminderRoute = require("./routes/reminderRoute");
 const channelRoute = require("./routes/channelRoute");
+const supplierCategoryRoute = require("./routes/supplierCategoryRoute");
 
 const app = express();
 
@@ -26,5 +27,6 @@ app.use("/api/v1/employees", employeeRoute);
 app.use("/api/v1/users", userRoute);
 app.use("/api/v1/reminders", reminderRoute);
 app.use("/api/v1/channels", channelRoute);
+app.use("/api/v1/supplier-categories", supplierCategoryRoute);
 
 module.exports = app;

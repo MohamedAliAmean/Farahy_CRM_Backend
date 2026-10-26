@@ -24,6 +24,8 @@ async function ensureIndexes() {
       db.collection("employees").createIndex({ exactDate: 1 }),
       db.collection("channels").createIndex({ name: 1 }),
       db.collection("channels").createIndex({ exactDate: 1 }),
+      db.collection("supplierCategories").createIndex({ name: 1 }),
+      db.collection("supplierCategories").createIndex({ active: 1 }),
       db.collection("logs").createIndex({ exactDate: -1 }),
     ]);
     console.log("✅ MongoDB indexes ready");
