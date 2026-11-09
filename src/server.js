@@ -15,7 +15,11 @@ connectDB().then(async () => {
     } catch (err) {
         console.error("CRM users seed failed:", err.message);
     }
-    startDueReminderScheduler();
+    if (process.env.DISABLE_REMINDER_SCHEDULER === "true") {
+        console.log("Due reminder scheduler disabled (DISABLE_REMINDER_SCHEDULER=true)");
+    } else {
+        startDueReminderScheduler();
+    }
     server.listen(port, () => {
         console.log(`App running on port ${port}...`);
     });
